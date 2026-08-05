@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>claude-code-bridge · demo</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0; padding: 2rem; min-height: 100vh; box-sizing: border-box;
+        background: #04070d; color: #eaf6ff;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      h1 { font-size: 1.1rem; margin: 0 0 .25rem; }
+      p.sub { color: #9fb4c6; margin: 0 0 1.5rem; font-size: .85rem; }
+      .row { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+      input, button {
+        font: inherit; border-radius: .5rem; border: 1px solid #1b2430;
+        background: #121926; color: #eaf6ff; padding: .55rem .75rem; outline: none;
+      }
+      input:focus { border-color: #35e6ff; }
+      #q { flex: 1; min-width: 240px; }
+      button { border-color: #35e6ff; color: #35e6ff; cursor: pointer; }
+      button:hover { background: #35e6ff; color: #000; }
+      .dot { display: inline-block; width: .6rem; height: .6rem; border-radius: 999px; background: #6f869a; }
+      pre {
+        white-space: pre-wrap; background: #0b1018; border: 1px solid #1b2430;
+        border-radius: .75rem; padding: 1rem; min-height: 6rem; font-size: .9rem;
+      }
+      code { color: #35e6ff; }
+    </style>
+  </head>
+  <body>
+    <h1>claude-code-bridge <span class="dot" id="dot"></span></h1>
+    <p class="sub">Ask Claude Code (your subscription) through the local bridge. Start it with <code>npm start</code>, paste the token, ask away.</p>
+
+    <div class="row">
+      <input id="token" type="password" placeholder="bridge token (from npm start)" />
+      <input id="port" value="7420" style="width: 6rem" />
+    </div>
+    <div class="row">
+      <input id="q" placeholder="e.g. what does this repo do?" />
+      <button id="send">Ask</button>
+    </div>
+    <pre id="out">…</pre>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      $("send").onclick = () => {
+        const token = $("token").value.trim();
+        const port = $("port").value.trim() || "7420";
+        const prompt = $("q").value.trim();
+        if (!token || !prompt) { $("out").textContent = "Enter the token and a question."; return; }
+        $("out").textContent = "";
+        $("dot").style.background = "#fbbf24";
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/?token=${encodeURIComponent(token)}`);
+        const id = Math.random().toString(36).slice(2);
+        ws.onopen = () => ws.send(JSON.stringify({ type: "ask", id, prompt }));
+        ws.onmessage = (ev) => {
+          let m; try { m = JSON.parse(ev.data); } catch { return; }
+          if (m.id && m.id !== id) return;
+          if (m.type === "ask-chunk") { $("out").textContent += m.data; $("dot").style.background = "#34d399"; }
+          else if (m.type === "ask-done") {
+            if (m.error && !$("out").textContent) $("out").textContent = "Error: " + m.error;
+            $("dot").style.background = "#6f869a";
+            ws.close();
+          }
+        };
+        ws.onerror = () => { $("out").textContent = "Could not reach the bridge — is it running?"; $("dot").style.background = "#ff5a6a"; };
+      };
+      $("q").addEventListener("keydown", (e) => e.key === "Enter" && $("send").click());
+    </script>
+  </body>
+</html>
