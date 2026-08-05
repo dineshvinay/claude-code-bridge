@@ -1,0 +1,34 @@
+{
+  "name": "claude-code-bridge",
+  "version": "0.1.0",
+  "description": "A tiny, secure loopback WebSocket bridge that streams a real Claude Code terminal (and Q&A / screenshot vision) into any web app — using your Claude Code subscription, not API credits.",
+  "type": "module",
+  "bin": {
+    "claude-code-bridge": "server.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "token": "node server.mjs --print-token",
+    "test": "node --test"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "websocket",
+    "terminal",
+    "bridge",
+    "xterm",
+    "node-pty",
+    "ai"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "node-pty": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
