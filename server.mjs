@@ -313,6 +313,55 @@ wss.on("connection", (ws) => {
         });
         break;
       }
+      case "transcribe": {
+        // Universal STT: the browser records the mic (MediaRecorder — works on EVERY
+        // browser incl. iOS/Brave) and sends the audio; we transcribe LOCALLY with
+        // Whisper (faster-whisper). $0, offline, no API credits.
+        const id = msg.id;
+        const raw = String(msg.audio || "").replace(/^data:[^;]+;base64,/, "");
+        if (!raw) {
+          send({ type: "transcribe-done", id, text: "", error: "no audio" });
+          break;
+        }
+        const mime = String(msg.mime || "");
+        const ext = mime.includes("mp4") || mime.includes("mpeg") || mime.includes("m4a") ? "m4a" : mime.includes("ogg") ? "ogg" : "webm";
+        const audioPath = join(os.tmpdir(), `nexus-voice-${Date.now()}.${ext}`);
+        try {
+          writeFileSync(audioPath, Buffer.from(raw, "base64"));
+        } catch (err) {
+          send({ type: "transcribe-done", id, text: "", error: `write failed: ${err.message}` });
+          break;
+        }
+        const scriptPath = join(__dirname, "transcribe.py");
+        const py = process.env.HUBOS_WHISPER_PY || (isWin ? "python" : "python3");
+        const cmd = isWin ? `${py} "%NEXUS_SCRIPT%" "%NEXUS_AUDIO%"` : `${py} "$NEXUS_SCRIPT" "$NEXUS_AUDIO"`;
+        let child;
+        try {
+          child = spawn(cmd, { shell: true, env: { ...process.env, NEXUS_SCRIPT: scriptPath, NEXUS_AUDIO: audioPath } });
+        } catch (err) {
+          try { unlinkSync(audioPath); } catch { /* noop */ }
+          send({ type: "transcribe-done", id, text: "", error: `whisper launch failed: ${err.message}` });
+          break;
+        }
+        let out = "";
+        let errOut = "";
+        child.stdout.on("data", (d) => (out += d.toString()));
+        child.stderr.on("data", (d) => (errOut += d.toString()));
+        child.on("error", (err) => {
+          try { unlinkSync(audioPath); } catch { /* noop */ }
+          send({ type: "transcribe-done", id, text: "", error: `whisper not available: ${err.message}` });
+        });
+        child.on("close", (code) => {
+          try { unlinkSync(audioPath); } catch { /* noop */ }
+          const text = out.trim();
+          if (code !== 0 && !text) {
+            send({ type: "transcribe-done", id, text: "", error: (errOut.trim().split("\n").pop() || `whisper exited ${code}`).slice(0, 200) });
+          } else {
+            send({ type: "transcribe-done", id, text });
+          }
+        });
+        break;
+      }
       default:
         break;
     }
